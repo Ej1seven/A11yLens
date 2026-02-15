@@ -1,0 +1,131 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sites     Site[]
+  collaborators ProjectCollaborator[]
+  invites   CollaborationInvite[]
+
+  @@index([ownerId])
+}
+
+model Site {
+  id          String   @id @default(cuid())
+  url         String
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  scans       Scan[]
+  
+  @@index([projectId])
+}
+
+model Scan {
+  id              String   @id @default(cuid())
+  siteId          String
+  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  status          String   // pending, running, completed, failed
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  totalIssues     Int      @default(0)
+  criticalIssues  Int      @default(0)
+  warningIssues   Int      @default(0)
+  infoIssues      Int      @default(0)
+  issues          Issue[]
+  
+  @@index([siteId])
+}
+
+model Issue {
+  id          String   @id @default(cuid())
+  scanId      String
+  scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  pageUrl     String?
+  type        String   // missing-alt, heading-order, contrast, aria-label, etc.
+  severity    String   // critical, warning, info
+  element     String
+  message     String
+  selector    String?
+  suggestion  String?
+  context     String?  // HTML context
+  createdAt   DateTime @default(now())
+  
+  @@index([scanId])
+  @@index([pageUrl])
+  @@index([type])
+  @@index([severity])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  projectsOwned Project[]
+  collaborators ProjectCollaborator[]
+  sessions     Session[]
+  sentInvites  CollaborationInvite[] @relation("Inviter")
+  receivedInvites CollaborationInvite[] @relation("Invitee")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ProjectCollaborator {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      String   @default("collaborator")
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model CollaborationInvite {
+  id         String   @id @default(cuid())
+  projectId  String
+  inviterId  String
+  inviteeId  String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  respondedAt DateTime?
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inviter    User     @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee    User     @relation("Invitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, inviteeId])
+  @@index([projectId])
+  @@index([inviteeId])
+  @@index([status])
+}
